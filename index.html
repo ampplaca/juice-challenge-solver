@@ -390,34 +390,64 @@ function bfsSolved(state, caps){
   return state.every(t => t.length === 0 || (t.length === caps[state.indexOf(t)] && t.every(c=>c===t[0])));
 }
 
-function bfsSolvedIdx(state, caps){
-  return state.every((t,i) => t.length === 0 || (t.length === caps[i] && t.every(c=>c===t[0])));
+
+function heuristic(state, caps){
+  // Count "color breaks" — each segment of non-uniform color in a tube
+  // that needs to be separated counts as work still to do
+  let cost = 0;
+  state.forEach((tube, i) => {
+    if(tube.length === 0) return;
+    // Count color segments in this tube
+    let segments = 1;
+    for(let j=1;j<tube.length;j++){
+      if(tube[j] !== tube[j-1]) segments++;
+    }
+    // A fully sorted tube has 1 segment and is full
+    if(!(segments === 1 && tube.length === caps[i])) cost += segments - 1;
+  });
+  return cost;
 }
 
-function runBFS(initTubes, caps, maxStates=300000){
+function runBFS(initTubes, caps, maxStates=1500000){
+  // A* search: f = g (moves so far) + h (heuristic)
   const start = initTubes.map(t=>[...t]);
-  const visited = new Set([stateKey(start)]);
-  const queue = [{state:start, path:[]}];
+  const startKey = stateKey(start);
+
+  // Priority queue using a simple sorted array (good enough for this size)
+  // Each entry: {state, path, g, f}
+  const h0 = heuristic(start, caps);
+  const open = [{state: start, path: [], g: 0, f: h0}];
+  const visited = new Map([[startKey, 0]]); // key -> best g seen
+
   let checked = 0;
-  while(queue.length > 0){
-    const {state, path} = queue.shift();
+
+  while(open.length > 0){
+    // Pop lowest f
+    open.sort((a,b) => a.f - b.f);
+    const {state, path, g} = open.shift();
     checked++;
     if(checked > maxStates) return {solution:null, tooComplex:true};
+
     if(bfsSolvedIdx(state, caps)) return {solution:path, tooComplex:false};
+
     for(let from=0;from<state.length;from++){
       for(let to=0;to<state.length;to++){
         if(from===to) continue;
         if(!bfsCanPour(state,from,to,caps)) continue;
         const ns = bfsPour(state,from,to,caps);
         const key = stateKey(ns);
-        if(visited.has(key)) continue;
-        visited.add(key);
-        queue.push({state:ns, path:[...path,{from,to}]});
+        const ng = g + 1;
+        const best = visited.get(key);
+        if(best !== undefined && best <= ng) continue;
+        visited.set(key, ng);
+        const nh = heuristic(ns, caps);
+        open.push({state:ns, path:[...path,{from,to}], g:ng, f:ng+nh});
       }
     }
   }
   return {solution:null, tooComplex:false};
 }
+
 
 function fullSolve(){
   // Check for unknowns
@@ -706,63 +736,7 @@ function evaluateMove(fromIdx, toIdx){
 
 
 // ── FULL BFS SOLVER (only when no unknowns remain) ───────────────────────
-function cloneState(state){ return state.map(t => [...t]); }
-function stateKey(state){ return state.map(t => t.join('-')).join('|'); }
 
-function bfsCanPour(state, from, to, caps){
-  const fromT = state[from], toT = state[to];
-  if(fromT.length === 0) return false;
-  if(toT.length >= caps[to]) return false;
-  const top = fromT[fromT.length-1];
-  if(toT.length > 0 && toT[toT.length-1] !== top) return false;
-  // avoid pointless move: uniform full tube to empty
-  if(toT.length === 0 && fromT.every(c=>c===fromT[0]) && fromT.length === caps[from]) return false;
-  return true;
-}
-
-function bfsPour(state, from, to, caps){
-  const s = cloneState(state);
-  const top = s[from][s[from].length-1];
-  let amount = 0;
-  for(let i=s[from].length-1;i>=0;i--){ if(s[from][i]===top) amount++; else break; }
-  const space = caps[to] - s[to].length;
-  const n = Math.min(amount, space);
-  for(let i=0;i<n;i++){ s[from].pop(); s[to].push(top); }
-  return s;
-}
-
-function bfsSolved(state, caps){
-  return state.every(t => t.length === 0 || (t.length === caps[state.indexOf(t)] && t.every(c=>c===t[0])));
-}
-
-function bfsSolvedIdx(state, caps){
-  return state.every((t,i) => t.length === 0 || (t.length === caps[i] && t.every(c=>c===t[0])));
-}
-
-function runBFS(initTubes, caps, maxStates=300000){
-  const start = initTubes.map(t=>[...t]);
-  const visited = new Set([stateKey(start)]);
-  const queue = [{state:start, path:[]}];
-  let checked = 0;
-  while(queue.length > 0){
-    const {state, path} = queue.shift();
-    checked++;
-    if(checked > maxStates) return {solution:null, tooComplex:true};
-    if(bfsSolvedIdx(state, caps)) return {solution:path, tooComplex:false};
-    for(let from=0;from<state.length;from++){
-      for(let to=0;to<state.length;to++){
-        if(from===to) continue;
-        if(!bfsCanPour(state,from,to,caps)) continue;
-        const ns = bfsPour(state,from,to,caps);
-        const key = stateKey(ns);
-        if(visited.has(key)) continue;
-        visited.add(key);
-        queue.push({state:ns, path:[...path,{from,to}]});
-      }
-    }
-  }
-  return {solution:null, tooComplex:false};
-}
 
 function fullSolve(){
   // Check for unknowns
@@ -947,63 +921,7 @@ function countConsecutiveTop(tube){
 
 
 
-function cloneState(state){ return state.map(t => [...t]); }
-function stateKey(state){ return state.map(t => t.join('-')).join('|'); }
 
-function bfsCanPour(state, from, to, caps){
-  const fromT = state[from], toT = state[to];
-  if(fromT.length === 0) return false;
-  if(toT.length >= caps[to]) return false;
-  const top = fromT[fromT.length-1];
-  if(toT.length > 0 && toT[toT.length-1] !== top) return false;
-  // avoid pointless move: uniform full tube to empty
-  if(toT.length === 0 && fromT.every(c=>c===fromT[0]) && fromT.length === caps[from]) return false;
-  return true;
-}
-
-function bfsPour(state, from, to, caps){
-  const s = cloneState(state);
-  const top = s[from][s[from].length-1];
-  let amount = 0;
-  for(let i=s[from].length-1;i>=0;i--){ if(s[from][i]===top) amount++; else break; }
-  const space = caps[to] - s[to].length;
-  const n = Math.min(amount, space);
-  for(let i=0;i<n;i++){ s[from].pop(); s[to].push(top); }
-  return s;
-}
-
-function bfsSolved(state, caps){
-  return state.every(t => t.length === 0 || (t.length === caps[state.indexOf(t)] && t.every(c=>c===t[0])));
-}
-
-function bfsSolvedIdx(state, caps){
-  return state.every((t,i) => t.length === 0 || (t.length === caps[i] && t.every(c=>c===t[0])));
-}
-
-function runBFS(initTubes, caps, maxStates=300000){
-  const start = initTubes.map(t=>[...t]);
-  const visited = new Set([stateKey(start)]);
-  const queue = [{state:start, path:[]}];
-  let checked = 0;
-  while(queue.length > 0){
-    const {state, path} = queue.shift();
-    checked++;
-    if(checked > maxStates) return {solution:null, tooComplex:true};
-    if(bfsSolvedIdx(state, caps)) return {solution:path, tooComplex:false};
-    for(let from=0;from<state.length;from++){
-      for(let to=0;to<state.length;to++){
-        if(from===to) continue;
-        if(!bfsCanPour(state,from,to,caps)) continue;
-        const ns = bfsPour(state,from,to,caps);
-        const key = stateKey(ns);
-        if(visited.has(key)) continue;
-        visited.add(key);
-        queue.push({state:ns, path:[...path,{from,to}]});
-      }
-    }
-  }
-  return {solution:null, tooComplex:false};
-}
 
 function fullSolve(){
   // Check for unknowns
