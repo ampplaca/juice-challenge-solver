@@ -392,56 +392,85 @@ function bfsSolved(state, caps){
 
 
 function heuristic(state, caps){
-  // Count "color breaks" — each segment of non-uniform color in a tube
-  // that needs to be separated counts as work still to do
   let cost = 0;
   state.forEach((tube, i) => {
     if(tube.length === 0) return;
-    // Count color segments in this tube
     let segments = 1;
-    for(let j=1;j<tube.length;j++){
-      if(tube[j] !== tube[j-1]) segments++;
-    }
-    // A fully sorted tube has 1 segment and is full
-    if(!(segments === 1 && tube.length === caps[i])) cost += segments - 1;
+    for(let j=1;j<tube.length;j++){ if(tube[j]!==tube[j-1]) segments++; }
+    if(!(segments===1 && tube.length===caps[i])) cost += segments - 1;
   });
   return cost;
 }
 
-function runBFS(initTubes, caps, maxStates=1500000){
-  // A* search: f = g (moves so far) + h (heuristic)
+// Min-heap priority queue for A*
+class MinHeap {
+  constructor(){ this.data = []; }
+  push(item){
+    this.data.push(item);
+    this._bubbleUp(this.data.length-1);
+  }
+  pop(){
+    const top = this.data[0];
+    const last = this.data.pop();
+    if(this.data.length > 0){ this.data[0]=last; this._sinkDown(0); }
+    return top;
+  }
+  get size(){ return this.data.length; }
+  _bubbleUp(i){
+    while(i>0){
+      const p=Math.floor((i-1)/2);
+      if(this.data[p].f<=this.data[i].f) break;
+      [this.data[p],this.data[i]]=[this.data[i],this.data[p]];
+      i=p;
+    }
+  }
+  _sinkDown(i){
+    const n=this.data.length;
+    while(true){
+      let min=i, l=2*i+1, r=2*i+2;
+      if(l<n && this.data[l].f<this.data[min].f) min=l;
+      if(r<n && this.data[r].f<this.data[min].f) min=r;
+      if(min===i) break;
+      [this.data[min],this.data[i]]=[this.data[i],this.data[min]];
+      i=min;
+    }
+  }
+}
+
+function runBFS(initTubes, caps, maxStates=500000){
   const start = initTubes.map(t=>[...t]);
   const startKey = stateKey(start);
-
-  // Priority queue using a simple sorted array (good enough for this size)
-  // Each entry: {state, path, g, f}
   const h0 = heuristic(start, caps);
-  const open = [{state: start, path: [], g: 0, f: h0}];
-  const visited = new Map([[startKey, 0]]); // key -> best g seen
-
+  
+  const open = new MinHeap();
+  open.push({state:start, path:[], g:0, f:h0});
+  const visited = new Map([[startKey, 0]]);
+  
   let checked = 0;
-
-  while(open.length > 0){
-    // Pop lowest f
-    open.sort((a,b) => a.f - b.f);
-    const {state, path, g} = open.shift();
+  while(open.size > 0){
+    const {state, path, g} = open.pop();
     checked++;
     if(checked > maxStates) return {solution:null, tooComplex:true};
-
     if(bfsSolvedIdx(state, caps)) return {solution:path, tooComplex:false};
+    
+    // Skip if we've already found a better path to this state
+    const curKey = stateKey(state);
+    if(visited.get(curKey) < g) continue;
 
     for(let from=0;from<state.length;from++){
+      if(state[from].length===0) continue;
+      // Skip if source tube is already complete
+      if(bfsSolvedIdx([state[from]], [caps[from]])) continue;
       for(let to=0;to<state.length;to++){
         if(from===to) continue;
         if(!bfsCanPour(state,from,to,caps)) continue;
         const ns = bfsPour(state,from,to,caps);
         const key = stateKey(ns);
-        const ng = g + 1;
+        const ng = g+1;
         const best = visited.get(key);
-        if(best !== undefined && best <= ng) continue;
+        if(best!==undefined && best<=ng) continue;
         visited.set(key, ng);
-        const nh = heuristic(ns, caps);
-        open.push({state:ns, path:[...path,{from,to}], g:ng, f:ng+nh});
+        open.push({state:ns, path:[...path,{from,to}], g:ng, f:ng+heuristic(ns,caps)});
       }
     }
   }
