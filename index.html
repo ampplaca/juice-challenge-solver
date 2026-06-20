@@ -391,6 +391,10 @@ function bfsSolved(state, caps){
 }
 
 
+function bfsSolvedIdx(state, caps){
+  return state.every((t,i) => t.length===0 || (t.length===caps[i] && t.every(c=>c===t[0])));
+}
+
 function heuristic(state, caps){
   let cost = 0;
   state.forEach((tube, i) => {
