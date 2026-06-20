@@ -441,7 +441,7 @@ class MinHeap {
   }
 }
 
-function runBFS(initTubes, caps, maxStates=500000){
+function runBFS(initTubes, caps, maxStates=Infinity){
   const start = initTubes.map(t=>[...t]);
   const startKey = stateKey(start);
   const h0 = heuristic(start, caps);
@@ -454,7 +454,7 @@ function runBFS(initTubes, caps, maxStates=500000){
   while(open.size > 0){
     const {state, path, g} = open.pop();
     checked++;
-    if(checked > maxStates) return {solution:null, tooComplex:true};
+    if(checked > maxStates) return {solution:null, tooComplex:false};
     if(bfsSolvedIdx(state, caps)) return {solution:path, tooComplex:false};
     
     // Skip if we've already found a better path to this state
@@ -505,7 +505,7 @@ function fullSolve(){
     }
 
     if(result.tooComplex){
-      setStatus('Puzzle too complex for full solve — use Suggest Best Move instead.', true);
+      setStatus('Puzzle too complex — try solving after making a few moves to reduce possibilities.', true);
       return;
     }
 
@@ -794,7 +794,7 @@ function fullSolve(){
     }
 
     if(result.tooComplex){
-      setStatus('Puzzle too complex for full solve — use Suggest Best Move instead.', true);
+      setStatus('Puzzle too complex — try solving after making a few moves to reduce possibilities.', true);
       return;
     }
 
@@ -979,7 +979,7 @@ function fullSolve(){
     }
 
     if(result.tooComplex){
-      setStatus('Puzzle too complex for full solve — use Suggest Best Move instead.', true);
+      setStatus('Puzzle too complex — try solving after making a few moves to reduce possibilities.', true);
       return;
     }
 
