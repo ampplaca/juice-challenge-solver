@@ -441,7 +441,7 @@ class MinHeap {
   }
 }
 
-function runBFS(initTubes, caps, maxStates=Infinity){
+function runBFS(initTubes, caps, maxStates=20000000){
   const start = initTubes.map(t=>[...t]);
   const startKey = stateKey(start);
   const h0 = heuristic(start, caps);
@@ -454,7 +454,7 @@ function runBFS(initTubes, caps, maxStates=Infinity){
   while(open.size > 0){
     const {state, path, g} = open.pop();
     checked++;
-    if(checked > maxStates) return {solution:null, tooComplex:false};
+    if(checked > maxStates) return {solution:null, tooComplex:true};
     if(bfsSolvedIdx(state, caps)) return {solution:path, tooComplex:false};
     
     // Skip if we've already found a better path to this state
@@ -505,7 +505,17 @@ function fullSolve(){
     }
 
     if(result.tooComplex){
-      setStatus('Puzzle too complex — try solving after making a few moves to reduce possibilities.', true);
+      // Try with bonus tube before giving up
+      const tubesWithBonus = [...tubes.map(t=>[...t]), []];
+      const capsWithBonus = [...capacities, 1];
+      result = runBFS(tubesWithBonus, capsWithBonus);
+      if(result.solution){
+        showFullSolution(result.solution, true);
+        setStatus('Solution found — requires bonus tube!', false);
+      } else {
+        document.getElementById('result').innerHTML = '<div class="no-solution" style="background:#1c2333;border:1px solid #e07820;border-radius:10px;padding:20px;text-align:center;color:#e07820;font-size:14px">⚠️ Not solveable from this state — try adding a 1-layer bonus tube (costs in-game currency). If you already have one, the puzzle may need different moves first.</div>';
+        setStatus('', false);
+      }
       return;
     }
 
@@ -771,77 +781,7 @@ function evaluateMove(fromIdx, toIdx){
 // ── FULL BFS SOLVER (only when no unknowns remain) ───────────────────────
 
 
-function fullSolve(){
-  // Check for unknowns
-  const hasUnknowns = tubes.some(t => t.includes(UNKNOWN));
-  if(hasUnknowns){
-    document.getElementById('result').innerHTML = '<div class="unknown-note" style="margin:0">All hidden layers (?) must be revealed before a full solve is possible. Keep playing and updating the tool until all layers are known.</div>';
-    return;
-  }
 
-  setStatus('Running full solver... this may take a moment.', false);
-  document.getElementById('result').innerHTML = '';
-
-  // Try without bonus tube first
-  setTimeout(() => {
-    const caps = [...capacities];
-    let result = runBFS(tubes, caps);
-
-    if(result.solution){
-      showFullSolution(result.solution, false);
-      setStatus('Full solution found!', false);
-      return;
-    }
-
-    if(result.tooComplex){
-      setStatus('Puzzle too complex — try solving after making a few moves to reduce possibilities.', true);
-      return;
-    }
-
-    // No solution — try adding a 1-layer bonus tube
-    const tubesWithBonus = [...tubes.map(t=>[...t]), []];
-    const capsWithBonus = [...caps, 1];
-    result = runBFS(tubesWithBonus, capsWithBonus);
-
-    if(result.solution){
-      showFullSolution(result.solution, true);
-      setStatus('Solution found — requires bonus tube!', false);
-    } else {
-      document.getElementById('result').innerHTML = '<div class="no-solution">No solution found even with a bonus tube. Double-check your tube contents.</div>';
-      setStatus('', false);
-    }
-  }, 50);
-}
-
-function showFullSolution(solution, needsBonusTube){
-  window.__fullSolution = solution;
-  window.__fullSolveInitTubes = tubes.map(t=>[...t]);
-  window.__fullSolveCaps = [...capacities];
-  window.__previewStep = 0;
-
-  let html = '';
-  if(needsBonusTube){
-    html += `<div style="background:#3a2a10;border:1px solid #e07820;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:13px;color:#e0b060;line-height:1.6">
-      ⚠️ <b>This solution requires the 1-layer bonus tube</b> — costs money in-game. Last resort only.
-    </div>`;
-  }
-
-  html += `<div class="suggestion-card" style="border-color:#4a9fe0;padding:16px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div class="suggestion-title" style="color:#4a9fe0;margin:0">Full Solution — ${solution.length} moves</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <button onclick="stepSolution(-1)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">← Prev</button>
-        <span id="sol-step-label" style="font-size:13px;color:#8b949e;min-width:70px;text-align:center">Step 1 / ${solution.length}</span>
-        <button onclick="stepSolution(1)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">Next →</button>
-      </div>
-    </div>
-    <div id="sol-tubes-display" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;padding:16px;background:#0d1117;border-radius:10px;min-height:120px"></div>
-    <div id="sol-move-label" style="text-align:center;margin-top:12px;font-size:14px;font-weight:600;color:#e8ecf1"></div>
-  </div>`;
-
-  document.getElementById('result').innerHTML = html;
-  renderSolutionStep(0);
-}
 
 function getStateAtStep(stepIdx){
   const solution = window.__fullSolution;
@@ -954,49 +894,6 @@ function countConsecutiveTop(tube){
 
 
 
-
-
-function fullSolve(){
-  // Check for unknowns
-  const hasUnknowns = tubes.some(t => t.includes(UNKNOWN));
-  if(hasUnknowns){
-    document.getElementById('result').innerHTML = '<div class="unknown-note" style="margin:0">All hidden layers (?) must be revealed before a full solve is possible. Keep playing and updating the tool until all layers are known.</div>';
-    return;
-  }
-
-  setStatus('Running full solver... this may take a moment.', false);
-  document.getElementById('result').innerHTML = '';
-
-  // Try without bonus tube first
-  setTimeout(() => {
-    const caps = [...capacities];
-    let result = runBFS(tubes, caps);
-
-    if(result.solution){
-      showFullSolution(result.solution, false);
-      setStatus('Full solution found!', false);
-      return;
-    }
-
-    if(result.tooComplex){
-      setStatus('Puzzle too complex — try solving after making a few moves to reduce possibilities.', true);
-      return;
-    }
-
-    // No solution — try adding a 1-layer bonus tube
-    const tubesWithBonus = [...tubes.map(t=>[...t]), []];
-    const capsWithBonus = [...caps, 1];
-    result = runBFS(tubesWithBonus, capsWithBonus);
-
-    if(result.solution){
-      showFullSolution(result.solution, true);
-      setStatus('Solution found — requires bonus tube!', false);
-    } else {
-      document.getElementById('result').innerHTML = '<div class="no-solution">No solution found even with a bonus tube. Double-check your tube contents.</div>';
-      setStatus('', false);
-    }
-  }, 50);
-}
 
 
 
@@ -1115,58 +1012,84 @@ function suggestMove(){
     setStatus('Fill in some tube contents first.', true);
     return;
   }
+
+  const hasUnknowns = tubes.some(t => t.includes(UNKNOWN));
+
+  // If no unknowns, use A* to find the actual best first move
+  if(!hasUnknowns){
+    setStatus('Calculating best move...', false);
+    setTimeout(() => {
+      const result = runBFS(tubes, capacities, 200000);
+      if(result.solution && result.solution.length > 0){
+        const best = result.solution[0];
+        const m = {from: best.from, to: best.to, amount: 1, score: 999, reasons: ['A* optimal move']};
+        window.__lastBestMove = m;
+        // Get top alternatives from scoring
+        const allMoves = getAllScoredMoves();
+        renderSuggestion(m, allMoves.filter(x => !(x.from===m.from && x.to===m.to)).slice(0,4));
+        setStatus('Found optimal move via A*', false);
+        return;
+      }
+      // Fallback to heuristic if A* times out
+      const allMoves = getAllScoredMoves();
+      if(!allMoves.length){
+        document.getElementById('result').innerHTML = '<div class="no-solution">No valid moves found. Reveal more hidden layers or check your tube entries.</div>';
+        return;
+      }
+      window.__lastBestMove = allMoves[0];
+      renderSuggestion(allMoves[0], allMoves.slice(1,5));
+      setStatus(`Found ${allMoves.length} valid move(s)`, false);
+    }, 30);
+    return;
+  }
+
+  // With unknowns, use heuristic scoring
+  const allMoves = getAllScoredMoves();
+  if(!allMoves.length){
+    document.getElementById('result').innerHTML = '<div class="no-solution">No valid moves found. Reveal more hidden layers or check your tube entries.</div>';
+    setStatus('', false);
+    return;
+  }
+  window.__lastBestMove = allMoves[0];
+  renderSuggestion(allMoves[0], allMoves.slice(1,5));
+  setStatus(`Found ${allMoves.length} valid move(s)`, false);
+}
+
+function getAllScoredMoves(){
   const moves = [];
   for(let from=0; from<tubes.length; from++){
     for(let to=0; to<tubes.length; to++){
       if(from===to) continue;
       const m = evaluateMove(from, to);
       if(!m) continue;
-
-      // Penalize reversing the last move (A→B followed by B→A)
-      if(__lastAppliedMove && m.from === __lastAppliedMove.to && m.to === __lastAppliedMove.from){
-        m.score -= 80;
-        m.reasons.push('⚠ reverses last move');
+      // Penalize reversing last move
+      if(__lastAppliedMove && m.from===__lastAppliedMove.to && m.to===__lastAppliedMove.from){
+        m.score -= 80; m.reasons.push('reverses last move');
       }
-
-      // Penalize moves seen in recent history (loop detection)
-      const moveKey = m.from + '-' + m.to;
-      const recentCount = __moveHistory.filter(h => h === moveKey).length;
-      if(recentCount >= 1){
-        m.score -= 40 * recentCount;
-        m.reasons.push('⚠ repeated move detected');
-      }
-
+      // Penalize repeated moves
+      const moveKey = m.from+'-'+m.to;
+      const recentCount = __moveHistory.filter(h=>h===moveKey).length;
+      if(recentCount >= 1){ m.score -= 40*recentCount; m.reasons.push('repeated move'); }
       moves.push(m);
     }
   }
-  if(moves.length === 0){
-    document.getElementById('result').innerHTML = '<div class="no-solution">No valid moves found with current known info. Reveal more hidden layers or check your tube entries.</div>';
-    setStatus('', false);
-    return;
-  }
-  // LOOKAHEAD: simulate each move and count future stacking opportunities it creates
-  moves.forEach(m => {
-    const lookaheadScore = lookahead(m.from, m.to);
-    m.score += lookaheadScore;
-    if(lookaheadScore > 0) m.reasons.push(`+${lookaheadScore} lookahead (enables future stacks)`);
-  });
-
   moves.sort((a,b) => b.score - a.score);
-  const best = moves[0];
+  return moves;
+}
 
+function renderSuggestion(best, alts){
   let html = `
     <div class="suggestion-card">
       <div class="suggestion-title">Suggested move</div>
       <div class="suggestion-move">Tube ${best.from+1} &rarr; Tube ${best.to+1}</div>
       <div class="suggestion-reason">Pours ${best.amount} layer(s). ${best.reasons.join(', ')}.</div>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap">
-        <button onclick="applyMove()" style="background:#a8e3a0;color:#1c2333;border:none;font-weight:700;font-size:13px;padding:9px 24px;border-radius:8px;cursor:pointer">✅ Done — Apply This Move</button>
-        <button onclick="showChainForMove(window.__lastBestMove.from,window.__lastBestMove.to,'chain-main')" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;font-size:13px;padding:9px 18px;border-radius:8px;cursor:pointer">🔗 Show Simulated Chain</button>
+        <button onclick="applyMove()" style="background:#a8e3a0;color:#1c2333;border:none;font-weight:700;font-size:13px;padding:9px 24px;border-radius:8px;cursor:pointer">&#9989; Done &mdash; Apply This Move</button>
+        <button onclick="showChainForMove(window.__lastBestMove.from,window.__lastBestMove.to,'chain-main')" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;font-size:13px;padding:9px 18px;border-radius:8px;cursor:pointer">&#128279; Show Simulated Chain</button>
       </div>
       <div id="chain-main" style="margin-top:14px"></div>
     </div>`;
 
-  const alts = moves.slice(1,5);
   if(alts.length){
     html += `<div class="row-label" style="margin-top:0">Other options</div><div class="alt-list">`;
     alts.forEach((m,i) => {
@@ -1176,8 +1099,8 @@ function suggestMove(){
           <span class="alt-score">score ${m.score}</span>
         </div>
         <div style="display:flex;gap:8px">
-          <button onclick="applySpecificMove(${m.from},${m.to})" style="background:#a8e3a0;color:#1c2333;border:none;font-weight:700;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer">✅ Apply</button>
-          <button onclick="showChainForMove(${m.from},${m.to},'chain-alt-${i}')" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer">🔗 Show Chain</button>
+          <button onclick="applySpecificMove(${m.from},${m.to})" style="background:#a8e3a0;color:#1c2333;border:none;font-weight:700;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer">&#9989; Apply</button>
+          <button onclick="showChainForMove(${m.from},${m.to},'chain-alt-${i}')" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer">&#128279; Show Chain</button>
         </div>
         <div id="chain-alt-${i}" style="display:none;width:100%"></div>
       </div>`;
@@ -1187,374 +1110,10 @@ function suggestMove(){
 
   const hasUnknowns = tubes.some(t => t.includes(UNKNOWN));
   if(hasUnknowns){
-    html += `<div class="unknown-note">Some tubes still have hidden (?) layers. After making a move in-game, click in the newly revealed color, then ask for the next suggestion.</div>`;
+    html += `<div class="unknown-note" style="margin-top:14px">Some tubes still have hidden (?) layers. After making a move in-game, update any newly revealed colors, then suggest again.</div>`;
   }
 
   document.getElementById('result').innerHTML = html;
-  // Store best move so Apply button can use it
-  window.__lastBestMove = best;
-  setStatus(`Found ${moves.length} valid move(s)`, false);
 }
 
-
-let __undoHistory = [];
-
-function pushUndo(){
-  __undoHistory.push({
-    tubes: tubes.map(t=>[...t]),
-    capacities: [...capacities],
-    tubeCount
-  });
-  if(__undoHistory.length > 20) __undoHistory.shift();
-  document.getElementById('btn-undo').disabled = false;
-  document.getElementById('btn-undo').style.opacity = '1';
-}
-
-function undo(){
-  if(!__undoHistory.length) return;
-  const prev = __undoHistory.pop();
-  tubes = prev.tubes.map(t=>[...t]);
-  capacities = [...prev.capacities];
-  tubeCount = prev.tubeCount;
-  document.getElementById('tube-count-display').textContent = tubeCount;
-  renderTubes();
-  document.getElementById('result').innerHTML = '';
-  setStatus('Undone', false);
-  if(!__undoHistory.length){
-    document.getElementById('btn-undo').disabled = true;
-    document.getElementById('btn-undo').style.opacity = '0.4';
-  }
-}
-function saveState(){
-  const state = {
-    tubes: tubes.map(t=>[...t]),
-    capacities: [...capacities],
-    tubeCount,
-    capacity,
-    level: document.getElementById('level-select').value,
-    savedAt: new Date().toLocaleString()
-  };
-  localStorage.setItem('juice_saved_state', JSON.stringify(state));
-  document.getElementById('save-status').textContent = '✓ State saved — will persist even if you close the page';
-  document.getElementById('btn-load').disabled = false;
-  document.getElementById('btn-load').style.opacity = '1';
-}
-
-function loadState(){
-  const raw = localStorage.getItem('juice_saved_state');
-  if(!raw){ alert('No saved state found.'); return; }
-  const savedState = JSON.parse(raw);
-  tubes = savedState.tubes.map(t=>[...t]);
-  capacities = [...savedState.capacities];
-  tubeCount = savedState.tubeCount;
-  capacity = savedState.capacity;
-  document.getElementById('tube-count-display').textContent = tubeCount;
-  document.getElementById('cap-display').textContent = capacity;
-  document.getElementById('level-select').value = savedState.level;
-  renderTubes();
-  document.getElementById('result').innerHTML = '';
-  document.getElementById('save-status').textContent = '↩ Loaded saved state' + (savedState.savedAt ? ' from ' + savedState.savedAt : '');
-  setStatus('', false);
-}
-
-// ── DEDUCE UNKNOWNS ───────────────────────────────────────────────────────
-function deduceUnknowns(){
-  const cap = capacities[0]; // standard capacity (e.g. 4)
-  const totalPerColor = cap; // each color appears exactly `cap` times total
-
-  // Count known instances of each color
-  const counts = {};
-  PALETTE.forEach(p => counts[p.label] = 0);
-  tubes.forEach(tube => {
-    tube.forEach(c => {
-      if(c !== '?' && counts[c] !== undefined) counts[c]++;
-    });
-  });
-
-  // Colors that are fully accounted for (can't appear in any ?)
-  const fullyKnown = new Set(Object.keys(counts).filter(c => counts[c] >= totalPerColor));
-
-  // Find remaining unknowns needed per color
-  const remaining = {};
-  PALETTE.forEach(p => {
-    remaining[p.label] = totalPerColor - counts[p.label];
-  });
-
-  // Count total ? slots
-  const totalUnknowns = tubes.reduce((sum,t) => sum + t.filter(c=>c==='?').length, 0);
-
-  let deduced = 0;
-  let log = [];
-  let changed = true;
-
-  while(changed){
-    changed = false;
-
-    // Rebuild counts and remaining each iteration
-    const curCounts = {};
-    PALETTE.forEach(p => curCounts[p.label] = 0);
-    tubes.forEach(tube => tube.forEach(c => { if(c!=='?' && curCounts[c]!==undefined) curCounts[c]++; }));
-    const curRemaining = {};
-    PALETTE.forEach(p => curRemaining[p.label] = totalPerColor - curCounts[p.label]);
-    const curFullyKnown = new Set(Object.keys(curCounts).filter(c => curCounts[c] >= totalPerColor));
-    const curTotalQ = tubes.reduce((sum,t) => sum + t.filter(c=>c==='?').length, 0);
-
-    // Rule 1: if a color has 0 remaining, eliminate it from all ?
-    // (already handled by not assigning it)
-
-    // Rule 2: if only ONE color still has unknowns remaining and equals total ? count
-    const colorsWithRemaining = Object.keys(curRemaining).filter(c => curRemaining[c] > 0);
-    if(colorsWithRemaining.length === 1 && curRemaining[colorsWithRemaining[0]] === curTotalQ && curTotalQ > 0){
-      const onlyColor = colorsWithRemaining[0];
-      tubes.forEach((tube, ti) => {
-        tube.forEach((c, ci) => {
-          if(c === '?'){
-            tubes[ti][ci] = onlyColor;
-            deduced++;
-            changed = true;
-            log.push(`Tube ${ti+1} slot ${ci+1}: must be ${onlyColor} (only color left)`);
-          }
-        });
-      });
-      continue;
-    }
-
-    // Rule 3: for each ? slot, eliminate colors that can't go there
-    // - color is fully accounted for
-    // - color same as layer directly above it (game rule: ? can't be same as color above)
-    tubes.forEach((tube, ti) => {
-      tube.forEach((c, ci) => {
-        if(c !== '?') return;
-        // Color directly above this slot (ci+1)
-        const colorAbove = ci+1 < tube.length ? tube[ci+1] : null;
-        // Eligible colors for this slot
-        const eligible = PALETTE.map(p=>p.label).filter(color => {
-          if(curFullyKnown.has(color)) return false; // already 4 placed
-          if(colorAbove && colorAbove !== '?' && color === colorAbove) return false; // can't match color above
-          return true;
-        });
-        if(eligible.length === 1){
-          tubes[ti][ci] = eligible[0];
-          deduced++;
-          changed = true;
-          log.push(`Tube ${ti+1} slot ${ci+1}: must be ${eligible[0]} (only eligible color)`);
-        }
-      });
-    });
-  }
-
-  renderTubes();
-
-  // Show results
-  const resultEl = document.getElementById('result');
-  if(deduced === 0){
-    resultEl.innerHTML = `<div style="background:#161b22;border:1px solid #7F77DD;border-radius:10px;padding:16px;font-size:13px;color:#8b93a7">
-      <div style="font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#7F77DD;margin-bottom:10px">🧩 Deduction Result</div>
-      <div>Could not deduce any unknowns yet — more colors need to be revealed first.</div>
-      <div style="margin-top:10px;font-size:12px;color:#8b93a7">Colors remaining to place: ${Object.entries(remaining).filter(([,v])=>v>0).map(([k,v])=>`${k}×${v}`).join(', ')}</div>
-    </div>`;
-  } else {
-    resultEl.innerHTML = `<div style="background:#161b22;border:1px solid #7F77DD;border-radius:10px;padding:16px;font-size:13px;color:#e8ecf1">
-      <div style="font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#7F77DD;margin-bottom:12px">🧩 Deduction Result — ${deduced} slot(s) filled</div>
-      ${log.map(l=>`<div style="padding:4px 0;border-bottom:1px solid rgba(127,119,221,0.1);font-size:12px;color:#c9d1d9">✓ ${l}</div>`).join('')}
-      <div style="margin-top:10px;font-size:12px;color:#8b93a7">Colors still unknown: ${Object.entries(remaining).filter(([,v])=>v>0).map(([k,v])=>`${k}×${v}`).join(', ') || 'none!'}</div>
-    </div>`;
-  }
-}
-
-// ── CHAIN VIEWER ──────────────────────────────────────────────────────────
-function buildChain(fromIdx, toIdx){
-  // Build the full deterministic chain starting with this move
-  const chain = [{from:fromIdx, to:toIdx}];
-  let state = simulatePour(tubes, capacities, fromIdx, toIdx);
-  if(!state) return chain;
-
-  for(let depth=0; depth<50; depth++){
-    let bestMove = null, bestScore = -1;
-    for(let from=0;from<state.length;from++){
-      const fromT = state[from];
-      if(!fromT.length) continue;
-      const top = fromT[fromT.length-1];
-      if(top === '?') continue;
-      for(let to=0;to<state.length;to++){
-        if(from===to) continue;
-        const toT = state[to];
-        if(!pourTargetValid(fromT, toT, capacities[to])) continue;
-        let s = 0;
-        if(toT.length>0 && toT[toT.length-1]===top) s=100;
-        const amt = Math.min((()=>{let c=0;for(let i=fromT.length-1;i>=0;i--){if(fromT[i]===top)c++;else break;}return c;})(), capacities[to]-toT.length);
-        const rem = fromT.length-amt;
-        if(rem>0 && fromT[rem-1]==='?') s+=120;
-        if(rem===0) s+=20;
-        if(s>bestScore){bestScore=s;bestMove={from,to};}
-      }
-    }
-    if(!bestMove || bestScore<=0) break;
-    chain.push(bestMove);
-    state = simulatePour(state, capacities, bestMove.from, bestMove.to);
-    if(!state) break;
-  }
-  return chain;
-}
-
-function showChainForMove(fromIdx, toIdx, containerId){
-  const container = document.getElementById(containerId);
-  if(!container) return;
-
-  const chain = buildChain(fromIdx, toIdx);
-  if(chain.length === 0){ container.innerHTML='<p style="font-size:12px;color:#8b93a7">No chain available.</p>'; return; }
-
-  // Store chain state for stepping
-  const chainId = containerId;
-  window.__chains = window.__chains || {};
-  window.__chains[chainId] = { chain, step: 0 };
-
-  container.style.display = 'block';
-  container.innerHTML = `
-    <div style="background:#0d1117;border:1px solid #4a9fe0;border-radius:10px;padding:14px;margin-top:8px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-        <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#4a9fe0">Simulated Chain — ${chain.length} moves</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <button onclick="stepChain('${chainId}',-1)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px">← Prev</button>
-          <span id="${chainId}-label" style="font-size:12px;color:#8b93a7;min-width:70px;text-align:center">Step 1/${chain.length}</span>
-          <button onclick="stepChain('${chainId}',1)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px">Next →</button>
-        </div>
-      </div>
-      <div id="${chainId}-tubes" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:12px;background:#161b22;border-radius:8px"></div>
-      <div id="${chainId}-move" style="text-align:center;margin-top:8px;font-size:13px;font-weight:600;color:#e8ecf1"></div>
-    </div>`;
-
-  renderChainStep(chainId, 0);
-}
-
-function stepChain(chainId, delta){
-  if(!window.__chains || !window.__chains[chainId]) return;
-  const c = window.__chains[chainId];
-  c.step = Math.max(0, Math.min(c.chain.length-1, c.step + delta));
-  renderChainStep(chainId, c.step);
-}
-
-function renderChainStep(chainId, stepIdx){
-  const c = window.__chains[chainId];
-  const chain = c.chain;
-  // Replay from initial state
-  let state = tubes.map(t=>[...t]);
-  for(let i=0;i<=stepIdx;i++){
-    const m = chain[i];
-    const top = state[m.from][state[m.from].length-1];
-    let amount=0;
-    for(let j=state[m.from].length-1;j>=0;j--){ if(state[m.from][j]===top) amount++; else break; }
-    const n=Math.min(amount, capacities[m.to]-state[m.to].length);
-    for(let k=0;k<n;k++){ state[m.from].pop(); state[m.to].push(top); }
-  }
-  const move = chain[stepIdx];
-  const container = document.getElementById(chainId+'-tubes');
-  if(!container) return;
-  container.innerHTML='';
-  state.forEach((tube,i)=>{
-    const cap=capacities[i];
-    const isFrom=i===move.from, isTo=i===move.to;
-    const wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:3px';
-    const arrow=document.createElement('div');
-    arrow.style.cssText='height:18px;display:flex;align-items:center;justify-content:center;font-size:14px';
-    arrow.textContent=isFrom?'👆':isTo?'👇':'';
-    wrap.appendChild(arrow);
-    const tubeEl=document.createElement('div');
-    const bc=isFrom?'#e07820':isTo?'#4a9fe0':'#cdd6e3';
-    tubeEl.style.cssText=`width:38px;border:2px solid ${bc};border-radius:0 0 10px 10px;border-top:none;display:flex;flex-direction:column-reverse;overflow:hidden;background:#1c2333;height:${cap*22}px`;
-    for(let slot=0;slot<cap;slot++){
-      const slotEl=document.createElement('div');
-      slotEl.style.cssText='width:100%;height:22px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px';
-      if(slot<tube.length){
-        const letter=tube[slot];
-        if(letter==='?'){slotEl.style.background='repeating-linear-gradient(45deg,#3a4358,#3a4358 3px,#454f66 3px,#454f66 6px)';slotEl.textContent='?';slotEl.style.color='#8b93a7';}
-        else{const p=PALETTE.find(p=>p.label===letter);slotEl.style.background=p?p.color:'#666';slotEl.textContent=letter;slotEl.style.color='#fff';}
-      }
-      tubeEl.appendChild(slotEl);
-    }
-    const num=document.createElement('div');
-    num.style.cssText=`font-size:9px;color:${isFrom?'#e07820':isTo?'#4a9fe0':'#8b93a7'}`;
-    num.textContent=i+1;
-    wrap.appendChild(tubeEl);wrap.appendChild(num);
-    container.appendChild(wrap);
-  });
-  const label=document.getElementById(chainId+'-label');
-  const moveLabel=document.getElementById(chainId+'-move');
-  if(label) label.textContent=`Step ${stepIdx+1}/${chain.length}`;
-  if(moveLabel) moveLabel.textContent=`Move: Tube ${move.from+1} → Tube ${move.to+1}`;
-}
-
-function applySpecificMove(fromIdx, toIdx){
-  const m = {from:fromIdx, to:toIdx};
-  __lastAppliedMove = m;
-  __moveHistory.push(fromIdx+'-'+toIdx);
-  if(__moveHistory.length>6) __moveHistory.shift();
-  const top = tubes[fromIdx][tubes[fromIdx].length-1];
-  let amount=0;
-  for(let j=tubes[fromIdx].length-1;j>=0;j--){ if(tubes[fromIdx][j]===top) amount++; else break; }
-  const n=Math.min(amount, capacities[toIdx]-tubes[toIdx].length);
-  for(let k=0;k<n;k++){ tubes[fromIdx].pop(); tubes[toIdx].push(top); }
-  window.__lastBestMove=null;
-  renderTubes();
-  document.getElementById('result').innerHTML='';
-  setStatus(`Applied: Tube ${fromIdx+1} → Tube ${toIdx+1}`, false);
-  setTimeout(()=>suggestMove(),200);
-}
-
-
-function applyMove(){
-  const m = window.__lastBestMove;
-  if(!m){ alert('No suggested move to apply.'); return; }
-
-  const fromTube = tubes[m.from];
-  const toTube = tubes[m.to];
-  const toCap = capacities[m.to];
-  const top = fromTube[fromTube.length-1];
-
-  // Count consecutive top color
-  let amount = 0;
-  for(let i=fromTube.length-1;i>=0;i--){ if(fromTube[i]===top) amount++; else break; }
-  const space = toCap - toTube.length;
-  const n = Math.min(amount, space);
-
-  for(let i=0;i<n;i++){
-    tubes[m.from].pop();
-    tubes[m.to].push(top);
-  }
-
-  __lastAppliedMove = {from: m.from, to: m.to};
-  __moveHistory.push(m.from + '-' + m.to);
-  if(__moveHistory.length > 6) __moveHistory.shift(); // keep last 6 moves
-  pushUndo();
-  window.__lastBestMove = null;
-  renderTubes();
-  document.getElementById('result').innerHTML = '';
-  setStatus(`Applied: Tube ${m.from+1} → Tube ${m.to+1}. Update any newly revealed layers, then suggest again.`, false);
-  // Auto-suggest next move
-  setTimeout(() => suggestMove(), 200);
-}
-
-// Keyboard navigation for solution steps
-document.addEventListener('keydown', (e) => {
-  if(!window.__fullSolution) return;
-  if(e.key === 'ArrowRight') stepSolution(1);
-  if(e.key === 'ArrowLeft') stepSolution(-1);
-});
-
-// Init
-buildPalette();
-tubeCount = LEVEL_TUBES[1];
-for(let i=0;i<tubeCount;i++){ tubes.push([]); capacities.push(capacity); }
-renderTubes();
-
-// Re-enable load button if a saved state exists
-if(localStorage.getItem('juice_saved_state')){
-  const s = JSON.parse(localStorage.getItem('juice_saved_state'));
-  document.getElementById('btn-load').disabled = false;
-  document.getElementById('btn-load').style.opacity = '1';
-  document.getElementById('save-status').textContent = '💾 Saved state available' + (s.savedAt ? ' from ' + s.savedAt : '') + ' — click Load to restore';
-}
-</script>
-</body>
-</html>
+>
