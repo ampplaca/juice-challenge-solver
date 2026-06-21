@@ -1116,4 +1116,146 @@ function renderSuggestion(best, alts){
   document.getElementById('result').innerHTML = html;
 }
 
->
+
+
+// ── UNDO ─────────────────────────────────────────────────────────────────
+let __undoHistory = [];
+
+function pushUndo(){
+  __undoHistory.push({
+    tubes: tubes.map(t=>[...t]),
+    capacities: [...capacities],
+    tubeCount
+  });
+  if(__undoHistory.length > 20) __undoHistory.shift();
+  const btn = document.getElementById('btn-undo');
+  if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+}
+
+function undo(){
+  if(!__undoHistory.length) return;
+  const prev = __undoHistory.pop();
+  tubes = prev.tubes.map(t=>[...t]);
+  capacities = [...prev.capacities];
+  tubeCount = prev.tubeCount;
+  document.getElementById('tube-count-display').textContent = tubeCount;
+  renderTubes();
+  document.getElementById('result').innerHTML = '';
+  setStatus('Undone', false);
+  const btn = document.getElementById('btn-undo');
+  if(btn && !__undoHistory.length){ btn.disabled=true; btn.style.opacity='0.4'; }
+}
+
+// ── SAVE / LOAD STATE ─────────────────────────────────────────────────────
+function saveState(){
+  const state = {
+    tubes: tubes.map(t=>[...t]),
+    capacities: [...capacities],
+    tubeCount,
+    capacity,
+    level: document.getElementById('level-select').value,
+    savedAt: new Date().toLocaleString()
+  };
+  localStorage.setItem('juice_saved_state', JSON.stringify(state));
+  document.getElementById('save-status').textContent = '✓ State saved — will persist even if you close the page';
+  const btnLoad = document.getElementById('btn-load');
+  if(btnLoad){ btnLoad.disabled=false; btnLoad.style.opacity='1'; }
+}
+
+function loadState(){
+  const raw = localStorage.getItem('juice_saved_state');
+  if(!raw){ alert('No saved state found.'); return; }
+  const s = JSON.parse(raw);
+  tubes = s.tubes.map(t=>[...t]);
+  capacities = [...s.capacities];
+  tubeCount = s.tubeCount;
+  capacity = s.capacity;
+  document.getElementById('tube-count-display').textContent = tubeCount;
+  document.getElementById('cap-display').textContent = capacity;
+  document.getElementById('level-select').value = s.level;
+  renderTubes();
+  document.getElementById('result').innerHTML = '';
+  document.getElementById('save-status').textContent = '↩ Loaded saved state' + (s.savedAt ? ' from ' + s.savedAt : '');
+  setStatus('', false);
+}
+
+// ── DEDUCE UNKNOWNS ───────────────────────────────────────────────────────
+function deduceUnknowns(){
+  const totalPerColor = capacities[0] || 4;
+  let deduced = 0, log = [], changed = true;
+
+  while(changed){
+    changed = false;
+    const curCounts = {};
+    PALETTE.forEach(p => curCounts[p.label] = 0);
+    tubes.forEach(tube => tube.forEach(c => { if(c!==UNKNOWN && curCounts[c]!==undefined) curCounts[c]++; }));
+    const curRemaining = {};
+    PALETTE.forEach(p => curRemaining[p.label] = totalPerColor - curCounts[p.label]);
+    const curFullyKnown = new Set(Object.keys(curCounts).filter(c => curCounts[c] >= totalPerColor));
+    const curTotalQ = tubes.reduce((sum,t) => sum + t.filter(c=>c===UNKNOWN).length, 0);
+
+    const colorsWithRemaining = Object.keys(curRemaining).filter(c => curRemaining[c] > 0);
+    if(colorsWithRemaining.length === 1 && curRemaining[colorsWithRemaining[0]] === curTotalQ && curTotalQ > 0){
+      const onlyColor = colorsWithRemaining[0];
+      tubes.forEach((tube, ti) => {
+        tube.forEach((c, ci) => {
+          if(c === UNKNOWN){ tubes[ti][ci] = onlyColor; deduced++; changed = true; log.push(`Tube ${ti+1} slot ${ci+1}: must be ${onlyColor} (only color left)`); }
+        });
+      });
+      continue;
+    }
+
+    tubes.forEach((tube, ti) => {
+      tube.forEach((c, ci) => {
+        if(c !== UNKNOWN) return;
+        const colorAbove = ci+1 < tube.length ? tube[ci+1] : null;
+        const eligible = PALETTE.map(p=>p.label).filter(color => {
+          if(curFullyKnown.has(color)) return false;
+          if(colorAbove && colorAbove !== UNKNOWN && color === colorAbove) return false;
+          return true;
+        });
+        if(eligible.length === 1){
+          tubes[ti][ci] = eligible[0]; deduced++; changed = true;
+          log.push(`Tube ${ti+1} slot ${ci+1}: must be ${eligible[0]} (only eligible color)`);
+        }
+      });
+    });
+  }
+
+  renderTubes();
+  const resultEl = document.getElementById('result');
+  if(deduced === 0){
+    resultEl.innerHTML = `<div style="background:#161b22;border:1px solid #7F77DD;border-radius:10px;padding:16px;font-size:13px;color:#8b93a7">
+      <div style="font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#7F77DD;margin-bottom:10px">🧩 Deduction Result</div>
+      Could not deduce any unknowns yet — more colors need to be revealed first.
+    </div>`;
+  } else {
+    resultEl.innerHTML = `<div style="background:#161b22;border:1px solid #7F77DD;border-radius:10px;padding:16px;font-size:13px;color:#e8ecf1">
+      <div style="font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#7F77DD;margin-bottom:12px">🧩 Deduction Result — ${deduced} slot(s) filled</div>
+      ${log.map(l=>`<div style="padding:4px 0;border-bottom:1px solid rgba(127,119,221,0.1);font-size:12px;color:#c9d1d9">✓ ${l}</div>`).join('')}
+    </div>`;
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+buildPalette();
+tubeCount = LEVEL_TUBES[1];
+for(let i=0;i<tubeCount;i++){ tubes.push([]); capacities.push(capacity); }
+renderTubes();
+
+document.addEventListener('keydown', (e) => {
+  if(!window.__fullSolution) return;
+  if(e.key === 'ArrowRight') stepSolution(1);
+  if(e.key === 'ArrowLeft') stepSolution(-1);
+});
+
+if(localStorage.getItem('juice_saved_state')){
+  const s = JSON.parse(localStorage.getItem('juice_saved_state'));
+  const btnLoad = document.getElementById('btn-load');
+  if(btnLoad){ btnLoad.disabled=false; btnLoad.style.opacity='1'; }
+  const ss = document.getElementById('save-status');
+  if(ss) ss.textContent = '💾 Saved state available' + (s.savedAt?' from '+s.savedAt:'') + ' — click Load to restore';
+}
+</script>
+</body>
+</html>
